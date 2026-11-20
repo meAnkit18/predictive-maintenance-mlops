@@ -1,5 +1,4 @@
-
-name: Predictive Maintenance CI
+name: Predictive Maintenance CI/CD
 
 on:
   push:
@@ -26,5 +25,65 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run automated tests
+        run: pytest -v
+
+  deploy:
+    name: Deploy to AWS EC2
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy application over SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          pytest -v
+          set -euo pipefail
+
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_USER" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "Missing one or more GitHub Actions secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy_key
+          chmod 600 ~/.ssh/ec2_deploy_key
+
+          ssh -i ~/.ssh/ec2_deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            "$EC2_USER@$EC2_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR="$HOME/predictive-maintenance-mlops"
+          REPO_URL="https://github.com/meAnkit18/predictive-maintenance-mlops.git"
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            git clone "$REPO_URL" "$APP_DIR"
+          fi
+
+          cd "$APP_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+
+          sudo docker build -t predictive-maintenance-api:latest .
+          sudo docker rm -f predictive-maintenance 2>/dev/null || true
+          sudo docker run -d \
+            --name predictive-maintenance \
+            --restart unless-stopped \
+            -p 8000:8000 \
+            predictive-maintenance-api:latest
+
+          for attempt in $(seq 1 20); do
+            if sudo docker exec predictive-maintenance python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2)" ; then
+              echo "Deployment successful: application health check passed."
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "Deployment failed: application did not become healthy."
+          sudo docker logs --tail 100 predictive-maintenance
+          exit 1
+          REMOTE
