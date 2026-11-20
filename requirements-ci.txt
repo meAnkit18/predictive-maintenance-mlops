@@ -1,0 +1,4 @@
+# CI dependencies: API runtime plus test tools
+-r requirements-api.txt
+pytest
+httpx
