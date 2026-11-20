@@ -1,22 +1,17 @@
-
-# Use Python 3.11
+# Python runtime for the inference API
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy dependency file
-COPY requirements.txt .
+# Install only packages required to serve predictions.
+# Training, experiment tracking and test dependencies stay in requirements.txt.
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements-api.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application files
 COPY main.py .
 COPY models/ ./models/
 
-# Expose FastAPI port
 EXPOSE 8000
 
-# Start FastAPI
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
