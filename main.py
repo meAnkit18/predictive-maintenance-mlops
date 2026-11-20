@@ -5,6 +5,7 @@ import joblib
 import pandas as pd
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
@@ -29,6 +30,22 @@ app = FastAPI(
     title="Predictive Maintenance API",
     description="Machine failure prediction using Random Forest",
     version="1.0.0",
+)
+
+# Allow the Vercel dashboard (and local Vite development) to call this API.
+# Keep the list explicit rather than allowing arbitrary origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://predictive-maintenance-mlops-frontend.vercel.app",
+        "https://predictive-maintenance-mlop-git-5e4400-ankits-projects-5b336671.vercel.app",
+    ],
+    allow_origin_regex=r"https://predictive-maintenance-mlop.*-ankits-projects-5b336671\\.vercel\\.app",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 
